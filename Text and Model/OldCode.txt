@@ -1,0 +1,88 @@
+for i in range(10):
+    t1, t2 = generate_2_teams()
+    a1, a2 = Party(t1), Party(t2)
+    for pokemon in a1.pokemons:
+        p_hp = calculate_stat(True, pokemon.hp["Base"], pokemon.hp["EV"])
+        pokemon.remaining_hp = p_hp
+    
+    for pokemon in a2.pokemons:
+        p_hp = calculate_stat(True, pokemon.hp["Base"], pokemon.hp["EV"])
+        pokemon.remaining_hp = p_hp
+
+    i = 0
+    while True:
+        pokemon1 = a1.pokemons[a1.current_pokemon_index]
+        pokemon2 = a2.pokemons[a2.current_pokemon_index]
+    
+        # 2. pick a random move for each
+        p1_move_chosen = random.choice([pokemon1.move_1, pokemon1.move_2, pokemon1.move_3, pokemon1.move_4])
+        p2_move_chosen = random.choice([pokemon2.move_1, pokemon2.move_2, pokemon2.move_3, pokemon2.move_4])
+        
+        p1_action_space = [pokemon1.move_1, pokemon1.move_2, pokemon1.move_3, pokemon1.move_4]
+        p2_action_space = [pokemon2.move_1, pokemon2.move_2, pokemon2.move_3, pokemon2.move_4]
+        current_state = ([pokemon1.remaining_hp, pokemon2.remaining_hp] + 
+                         [move for move in sorted([pokemon1.move_1.power, pokemon1.move_2.power, pokemon1.move_3.power, pokemon1.move_4.power])])
+        
+        current_state_tensor = torch.tensor(current_state, dtype=torch.float32).unsqueeze(0)
+        p1_action_index = agent.choose_action(current_state_tensor)
+        p1_move_chosen = [pokemon1.move_1, pokemon1.move_2, pokemon1.move_3, pokemon1.move_4][p1_action_index]
+        
+        print(p1_move_chosen.power, [move for move in sorted([pokemon1.move_1.power, pokemon1.move_2.power, pokemon1.move_3.power, pokemon1.move_4.power])])
+
+
+        # 3. calculate damage done to each
+        # 3a. get the move type
+        p1_move_type = p1_move_chosen.move_type
+        p1_damage_dealt = calculate_damage(p1_move_chosen.power, 
+                                           calculate_stat(False, pokemon1.att["Base"], pokemon1.att["EV"]), 
+                                           calculate_stat(False, pokemon2.defence["Base"], pokemon2.defence["EV"]), 
+                                           p1_move_type, 
+                                           [pokemon2.type_1, pokemon2.type_2],
+                                           100,
+                                           type_effectiveness)
+
+        p2_move_type = p2_move_chosen.move_type
+        p2_damage_dealt = calculate_damage(p2_move_chosen.power, 
+                                           calculate_stat(False, pokemon2.att["Base"], pokemon2.att["EV"]), 
+                                           calculate_stat(False, pokemon1.defence["Base"], pokemon1.defence["EV"]), 
+                                           p2_move_type, 
+                                           [pokemon1.type_1, pokemon1.type_2],
+                                           100,
+                                           type_effectiveness)
+
+        # 4. proceed with damage, checking if hits (e.g. accuarcy) and if pokes die along the way.
+        if pokemon1.move_1.power:
+            pokemon2.remaining_hp = max(0, pokemon2.remaining_hp - p1_damage_dealt)
+            if pokemon2.remaining_hp == 0:
+                a2.dead.add(a2.current_pokemon_index)
+            
+                # 5. check for end condition (match done)
+                if (len(a2.dead) == 6):
+                    # print("Team 1 deaths:", a1.dead, "; team 2 deaths:", a2.dead)
+                    break
+                
+                numbers = list(range(6))
+                available_numbers = [num for num in numbers if num not in a2.dead]
+                random_number = random.choice(available_numbers)
+                a2.current_pokemon_index = random_number
+                # print("Team 1 deaths:", a1.dead, "; team 2 deaths:", a2.dead)
+            
+        if pokemon2.move_2.power:
+            pokemon1.remaining_hp = max(0, pokemon1.remaining_hp - p2_damage_dealt)
+            if pokemon1.remaining_hp == 0:
+                a1.dead.add(a1.current_pokemon_index)
+            
+                if (len(a1.dead) == 6):
+                    # print("Team 1 deaths:", a1.dead, "; team 2 deaths:", a2.dead)
+                    break
+                
+                numbers = list(range(6))
+                available_numbers = [num for num in numbers if num not in a1.dead]
+                random_number = random.choice(available_numbers)
+                a1.current_pokemon_index = random_number
+                # print("Team 1 deaths:", a1.dead, "; team 2 deaths:", a2.dead)
+                
+        # print(pokemon1.remaining_hp, pokemon2.remaining_hp)
+        i += 1
+        if i > 500:
+            break
